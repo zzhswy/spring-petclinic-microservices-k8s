@@ -1,0 +1,13 @@
+FROM alpine:latest
+RUN apk add --no-cache chromium tzdata
+WORKDIR /app
+COPY synthetic-client /app/synthetic-client
+COPY templates/ /app/templates/
+EXPOSE 8090
+
+# Environmental override so Chromedp effortlessly locates Alpine's Chromium package
+ENV CHROMEDP_NO_SANDBOX=true
+ENV CHROME_PATH=/usr/bin/chromium-browser
+
+# Execute static binary
+CMD ["/app/synthetic-client"]

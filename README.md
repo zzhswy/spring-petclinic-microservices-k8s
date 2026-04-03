@@ -1,174 +1,82 @@
-# Spring PetClinic Sample Application [![Build Status](https://github.com/spring-projects/spring-petclinic/actions/workflows/maven-build.yml/badge.svg)](https://github.com/spring-projects/spring-petclinic/actions/workflows/maven-build.yml)[![Build Status](https://github.com/spring-projects/spring-petclinic/actions/workflows/gradle-build.yml/badge.svg)](https://github.com/spring-projects/spring-petclinic/actions/workflows/gradle-build.yml)
+# Spring Petclinic - Kubernetes Microservices & Observability Edition
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/spring-projects/spring-petclinic) [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=7517918)
+## Overview
+This repository contains a completely refactored, cloud-native iteration of the monolithic Spring Petclinic application. The project has been deliberately rebuilt to demonstrate a highly decoupled **Kubernetes Microservices Architecture** featuring standalone **Headless Browser Observability Clients** that simulate and track real-world OpenTelemetry data.
 
-## Understanding the Spring Petclinic application with a few diagrams
+## Architecture & Boundaries
+The monolithic framework has been decomposed into distinctly isolated containers:
 
-See the presentation here:  
-[Spring Petclinic Sample Application (legacy slides)](https://speakerdeck.com/michaelisvy/spring-petclinic-sample-application?slide=20)
+### 1. Spring Boot Microservices
+- **`api-gateway` (NGINX)**: The unified edge router. This lightning-fast Alpine container binds explicitly to `NodePort 30080` and dynamically proxies traffic headers securely to the internal microservices without exposing them publicly.
+- **`customers-service`**: Manages the `Owner` and `Pet` databases, and renders the central Thymeleaf views.
+- **`vets-service`**: Manages the independent `Veterinarians` layer.
+- **`visits-service`**: Manages the `Visits` tracking and domains.
+- **`demo-db`**: Centralized K8s PostgreSQL instance deployed securely as an internal backing service.
 
-> **Note:** These slides refer to a legacy, pre–Spring Boot version of Petclinic and may not reflect the current Spring Boot–based implementation.  
-> For up-to-date information, please refer to this repository and its documentation.
+### 2. Standalone Observability Synthesizers
+Found inside the `/observability-clients/` directory, these robust clients act exactly like human website visitors, triggering massive bursts of synthetic web traffic tracking perfectly into OpenTelemetry platforms like Datadog, Prometheus, or Jaeger.
+- **`synthetic-client` (Golang + Chromedp)**: An advanced Golang application equipped with `Playwright`-style capabilities. It spins up random raw `incognito` Headless Chrome browser tabs within the Kubernetes node to perfectly simulate unique HTTP traffic sessions. Accompanied by a sleek UI.
 
+## Prerequisites
+To deploy this architecture, your local machine/cluster must run:
+- **Kubernetes CLI (`kubectl`)**
+- A live K8s cluster (Minikube, AWS EKS, or AliCloud ACK).
 
-## Run Petclinic locally
+*(Optional for manual source compilation: Java 17 JDK and Docker)*
 
-Spring Petclinic is a [Spring Boot](https://spring.io/guides/gs/spring-boot) application built using [Maven](https://spring.io/guides/gs/maven/) or [Gradle](https://spring.io/guides/gs/gradle/).
-Java 17 or later is required for the build, and the application can run with Java 17 or newer.
+---
 
-You first need to clone the project locally:
+## ⚡️ Zero-Compilation Deployment (Recommended)
+You do not need to download Java, compile `.jar` files, or build Docker images to test this environment! All microservices have been pre-compiled and securely published to the GitHub Container Registry (`ghcr.io`).
 
-```bash
-git clone https://github.com/spring-projects/spring-petclinic.git
-cd spring-petclinic
-```
-If you are using Maven, you can start the application on the command-line as follows:
-
-```bash
-./mvnw spring-boot:run
-```
-With Gradle, the command is as follows:
-
-```bash
-./gradlew bootRun
-```
-
-You can then access the Petclinic at <http://localhost:8080/>.
-
-<img width="1042" alt="petclinic-screenshot" src="https://cloud.githubusercontent.com/assets/838318/19727082/2aee6d6c-9b8e-11e6-81fe-e889a5ddfded.png">
-
-You can, of course, run Petclinic in your favorite IDE.
-See below for more details.
-
-## Building a Container
-
-There is no `Dockerfile` in this project. You can build a container image (if you have a docker daemon) using the Spring Boot build plugin:
+To instantly spin up the entire cluster over the internet, simply apply the pre-configured deployment manifests. Your Kubernetes node will automatically download the correct Docker images from GitHub and assemble the architecture:
 
 ```bash
-./mvnw spring-boot:build-image
+# 1. Create the overarching namespace
+kubectl apply -f k8s/namespace.yml
+
+# 2. Stand up the PostgreSQL database first
+kubectl apply -f k8s/db.yml
+
+# 3. Pull and deploy all pre-compiled microservices and the NGINX framework
+kubectl apply -f k8s/api-gateway.yml
+kubectl apply -f k8s/customers-service.yml
+kubectl apply -f k8s/vets-service.yml
+kubectl apply -f k8s/visits-service.yml
+
+# 4. Pull and deploy the Headless Chrome telemetry engine
+kubectl apply -f k8s/synthetic-client.yml
 ```
 
-## In case you find a bug/suggested improvement for Spring Petclinic
+Once executed, jump down to the **Interfacing with the Cluster** section below constraints!
 
-Our issue tracker is available [here](https://github.com/spring-projects/spring-petclinic/issues).
+---
 
-## Database configuration
+## 🛠 Manual Source Deployment Guide
+If you intend to modify the Java or Golang source code, you must orchestrate the pipeline locally.
 
-In its default configuration, Petclinic uses an in-memory database (H2) which
-gets populated at startup with data. The h2 console is exposed at `http://localhost:8080/h2-console`,
-and it is possible to inspect the content of the database using the `jdbc:h2:mem:<uuid>` URL. The UUID is printed at startup to the console.
-
-A similar setup is provided for MySQL and PostgreSQL if a persistent database configuration is needed. Note that whenever the database type changes, the app needs to run with a different profile: `spring.profiles.active=mysql` for MySQL or `spring.profiles.active=postgres` for PostgreSQL. See the [Spring Boot documentation](https://docs.spring.io/spring-boot/how-to/properties-and-configuration.html#howto.properties-and-configuration.set-active-spring-profiles) for more detail on how to set the active profile.
-
-You can start MySQL or PostgreSQL locally with whatever installer works for your OS or use docker:
-
+### 1. Compile Backend Artifacts
+Because Spring Boot requires compiled `.jar` environments, execute the native Gradle build matrix:
 ```bash
-docker run -e MYSQL_USER=petclinic -e MYSQL_PASSWORD=petclinic -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=petclinic -p 3306:3306 mysql:9.6
+./gradlew bootJar
 ```
 
-or
-
+### 2. Docker Image Provisioning
+Build and tag the corresponding images onto your local container layer. 
+*Hint: If deploying onto an x86 Linux machine from an Apple Silicon (M1/M2) Mac, use `docker buildx --platform linux/amd64` to prevent fatal JVM architecture translation crashes!*
 ```bash
-docker run -e POSTGRES_USER=petclinic -e POSTGRES_PASSWORD=petclinic -e POSTGRES_DB=petclinic -p 5432:5432 postgres:18.3
+docker build -t ghcr.io/<YOUR_GITHUB_USER>/spring-petclinic-api-gateway:latest api-gateway/
+docker push ghcr.io/<YOUR_GITHUB_USER>/spring-petclinic-api-gateway:latest
+
+# Repeat for customers, visits, vets, and observability clients...
 ```
+*Note: Ensure your YAML files inside `/k8s/` are updated to match your specific `ghcr.io/<YOUR_USERNAME>/...` paths before pushing into Kubernetes.*
 
-Further documentation is provided for [MySQL](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources/db/mysql/petclinic_db_setup_mysql.txt)
-and [PostgreSQL](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources/db/postgres/petclinic_db_setup_postgres.txt).
+---
 
-Instead of vanilla `docker` you can also use the provided `docker-compose.yml` file to start the database containers. Each one has a service named after the Spring profile:
+## 🌐 Interfacing with the Cluster
+Execute `kubectl -n petclinic-demo get pods` to verify that your microservices transitioned into the `1/1 RUNNING` state.
 
-```bash
-docker compose up mysql
-```
-
-or
-
-```bash
-docker compose up postgres
-```
-
-## Test Applications
-
-At development time we recommend you use the test applications set up as `main()` methods in `PetClinicIntegrationTests` (using the default H2 database and also adding Spring Boot Devtools), `MySqlTestApplication` and `PostgresIntegrationTests`. These are set up so that you can run the apps in your IDE to get fast feedback and also run the same classes as integration tests against the respective database. The MySql integration tests use Testcontainers to start the database in a Docker container, and the Postgres tests use Docker Compose to do the same thing.
-
-## Compiling the CSS
-
-There is a `petclinic.css` in `src/main/resources/static/resources/css`. It was generated from the `petclinic.scss` source, combined with the [Bootstrap](https://getbootstrap.com/) library. If you make changes to the `scss`, or upgrade Bootstrap, you will need to re-compile the CSS resources using the Maven profile "css", i.e. `./mvnw package -P css`. There is no build profile for Gradle to compile the CSS.
-
-## Working with Petclinic in your IDE
-
-### Prerequisites
-
-The following items should be installed in your system:
-
-- Java 17 or newer (full JDK, not a JRE)
-- [Git command line tool](https://help.github.com/articles/set-up-git)
-- Your preferred IDE
-  - Eclipse with the m2e plugin. Note: when m2e is available, there is a m2 icon in `Help -> About` dialog. If m2e is
-  not there, follow the installation process [here](https://www.eclipse.org/m2e/)
-  - [Spring Tools Suite](https://spring.io/tools) (STS)
-  - [IntelliJ IDEA](https://www.jetbrains.com/idea/)
-  - [VS Code](https://code.visualstudio.com)
-
-### Steps
-
-1. On the command line run:
-
-    ```bash
-    git clone https://github.com/spring-projects/spring-petclinic.git
-    ```
-
-1. Inside Eclipse or STS:
-
-    Open the project via `File -> Import -> Maven -> Existing Maven project`, then select the root directory of the cloned repo.
-
-    Then either build on the command line `./mvnw generate-resources` or use the Eclipse launcher (right-click on project and `Run As -> Maven install`) to generate the CSS. Run the application's main method by right-clicking on it and choosing `Run As -> Java Application`.
-
-1. Inside IntelliJ IDEA:
-
-    In the main menu, choose `File -> Open` and select the Petclinic [pom.xml](pom.xml). Click on the `Open` button.
-
-    - CSS files are generated from the Maven build. You can build them on the command line `./mvnw generate-resources` or right-click on the `spring-petclinic` project then `Maven -> Generates sources and Update Folders`.
-
-    - A run configuration named `PetClinicApplication` should have been created for you if you're using a recent Ultimate version. Otherwise, run the application by right-clicking on the `PetClinicApplication` main class and choosing `Run 'PetClinicApplication'`.
-
-1. Navigate to the Petclinic
-
-    Visit [http://localhost:8080](http://localhost:8080) in your browser.
-
-## Looking for something in particular?
-
-|Spring Boot Configuration | Class or Java property files  |
-|--------------------------|---|
-|The Main Class | [PetClinicApplication](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java) |
-|Properties Files | [application.properties](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources) |
-|Caching | [CacheConfiguration](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/java/org/springframework/samples/petclinic/system/CacheConfiguration.java) |
-
-## Interesting Spring Petclinic branches and forks
-
-The Spring Petclinic "main" branch in the [spring-projects](https://github.com/spring-projects/spring-petclinic)
-GitHub org is the "canonical" implementation based on Spring Boot and Thymeleaf. There are
-[quite a few forks](https://spring-petclinic.github.io/docs/forks.html) in the GitHub org
-[spring-petclinic](https://github.com/spring-petclinic). If you are interested in using a different technology stack to implement the Pet Clinic, please join the community there.
-
-## Interaction with other open-source projects
-
-One of the best parts about working on the Spring Petclinic application is that we have the opportunity to work in direct contact with many Open Source projects. We found bugs/suggested improvements on various topics such as Spring, Spring Data, Bean Validation and even Eclipse! In many cases, they've been fixed/implemented in just a few days.
-Here is a list of them:
-
-| Name | Issue |
-|------|-------|
-| Spring JDBC: simplify usage of NamedParameterJdbcTemplate | [SPR-10256](https://github.com/spring-projects/spring-framework/issues/14889) and [SPR-10257](https://github.com/spring-projects/spring-framework/issues/14890) |
-| Bean Validation / Hibernate Validator: simplify Maven dependencies and backward compatibility |[HV-790](https://hibernate.atlassian.net/browse/HV-790) and [HV-792](https://hibernate.atlassian.net/browse/HV-792) |
-| Spring Data: provide more flexibility when working with JPQL queries | [DATAJPA-292](https://github.com/spring-projects/spring-data-jpa/issues/704) |
-
-## Contributing
-
-The [issue tracker](https://github.com/spring-projects/spring-petclinic/issues) is the preferred channel for bug reports, feature requests and submitting pull requests.
-
-For pull requests, editor preferences are available in the [editor config](.editorconfig) for easy use in common text editors. Read more and download plugins at <https://editorconfig.org>. All commits must include a __Signed-off-by__ trailer at the end of each commit message to indicate that the contributor agrees to the Developer Certificate of Origin.
-For additional details, please refer to the blog post [Hello DCO, Goodbye CLA: Simplifying Contributions to Spring](https://spring.io/blog/2025/01/06/hello-dco-goodbye-cla-simplifying-contributions-to-spring).
-
-## License
-
-The Spring PetClinic sample application is released under version 2.0 of the [Apache License](https://www.apache.org/licenses/LICENSE-2.0).
+Once stable, access your new ecosystem via the NodePort assigned to the NGINX API Gateway:
+- **Main Web Interface:** 🔗 `http://<YOUR_CLUSTER_IP>:30080`
+- **Go Headless Engine Dashboard:** 🔗 `http://<YOUR_CLUSTER_IP>:30080/synthetic/`

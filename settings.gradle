@@ -1,1 +1,6 @@
 rootProject.name = 'spring-petclinic'
+
+include 'api-gateway'
+include 'customers-service'
+include 'vets-service'
+include 'visits-service'
