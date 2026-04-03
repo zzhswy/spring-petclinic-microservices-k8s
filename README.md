@@ -32,20 +32,7 @@ You do not need to download Java, compile `.jar` files, or build Docker images t
 To instantly spin up the entire cluster over the internet, simply apply the pre-configured deployment manifests. Your Kubernetes node will automatically download the correct Docker images from GitHub and assemble the architecture:
 
 ```bash
-# 1. Create the overarching namespace
-kubectl apply -f k8s/namespace.yml
-
-# 2. Stand up the PostgreSQL database first
-kubectl apply -f k8s/db.yml
-
-# 3. Pull and deploy all pre-compiled microservices and the NGINX framework
-kubectl apply -f k8s/api-gateway.yml
-kubectl apply -f k8s/customers-service.yml
-kubectl apply -f k8s/vets-service.yml
-kubectl apply -f k8s/visits-service.yml
-
-# 4. Pull and deploy the Headless Chrome telemetry engine
-kubectl apply -f k8s/synthetic-client.yml
+kubectl apply -f k8s/all-in-one.yml
 ```
 
 Once executed, jump down to the **Interfacing with the Cluster** section below constraints!
